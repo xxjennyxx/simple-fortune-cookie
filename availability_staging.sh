@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define variables for the services and endpoints
-FRONTEND_URL="https://group8.sdu.eficode.academy/"
+FRONTEND_URL="https://staginggroup8.sdu.eficode.academy/"
 
 # Function to check the status of a service
 check_service_status() {
