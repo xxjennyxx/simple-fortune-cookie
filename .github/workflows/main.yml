@@ -87,10 +87,63 @@ jobs:
       - name: Push Frontend Image to Docker Hub
         run: docker push mpldocker/frontend:latest
 
-  deploy_to_kubernetes:
-    name: Deploying to Kubernetes
+  deploy_to_staging:
+    name: Deploying to Staging
     runs-on: ubuntu-latest
     needs: [build_frontend_and_backend, test_frontend]
+    steps:
+      - name: Clone down repository
+        uses: actions/checkout@v4
+      
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.21.0
+        
+      - name: Configure Kubernetes
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.STAGINGKUBECONFIG }}" > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Deploy Redis
+        run: |
+          kubectl apply -f k8s/redis-pvc.yaml
+          kubectl apply -f k8s/redis-deployment.yaml
+          kubectl apply -f k8s/redis-service.yaml
+          kubectl rollout status deployment/redis-deployment
+
+      - name: Deploy Backend
+        run: |
+          kubectl apply -f k8s/backend-deployment.yaml
+          kubectl apply -f k8s/backend-service.yaml
+          kubectl rollout status deployment/backend-deployment
+      
+      - name: Deploy Frontend
+        run: |
+          kubectl apply -f k8s/frontend-deployment.yaml
+          kubectl apply -f k8s/frontend-service.yaml
+          kubectl apply -f k8s/frontend-staging-ingress.yaml
+          kubectl rollout status deployment/frontend-deployment
+
+  test_deployment:
+    name: Test Deployment
+    runs-on: ubuntu-latest
+    needs: [deploy_to_staging]
+    steps:
+        # No need to wait for the deployments to start, since deploy_to_kubernetes already waits for them to start.
+      - name: Clone down repository
+        uses: actions/checkout@v4
+
+      - name: Running availability test script
+        run: |
+          chmod +x availability.sh
+          ./availability.sh
+
+  deploy_to_production:
+    name: Deploying to Production
+    runs-on: ubuntu-latest
+    needs: [test_deployment]
     steps:
       - name: Clone down repository
         uses: actions/checkout@v4
@@ -106,7 +159,7 @@ jobs:
           echo "${{ secrets.KUBECONFIG }}" > $HOME/.kube/config
           chmod 600 $HOME/.kube/config
 
-      - name: Redeploy Redis
+      - name: Deploy Redis
         run: |
           kubectl apply -f k8s/redis-pvc.yaml
           kubectl apply -f k8s/redis-deployment.yaml
@@ -125,17 +178,3 @@ jobs:
           kubectl apply -f k8s/frontend-service.yaml
           kubectl apply -f k8s/frontend-ingress.yaml
           kubectl rollout status deployment/frontend-deployment
-
-  test_deployment:
-    name: Test Deployment
-    runs-on: ubuntu-latest
-    needs: [deploy_to_kubernetes]
-    steps:
-        # No need to wait for the deployments to start, since deploy_to_kubernetes already waits for them to start.
-      - name: Clone down repository
-        uses: actions/checkout@v4
-
-      - name: Running availability test script
-        run: |
-          chmod +x availability.sh
-          ./availability.sh
