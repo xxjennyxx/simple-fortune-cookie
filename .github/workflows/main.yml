@@ -125,3 +125,17 @@ jobs:
           kubectl apply -f k8s/frontend-service.yaml
           kubectl apply -f k8s/frontend-ingress.yaml
           kubectl rollout status deployment/frontend-deployment
+
+  test_deployment:
+    name: Test Deployment
+    runs-on: ubuntu-latest
+    needs: [deploy_to_kubernetes]
+    steps:
+        # No need to wait for the deployments to start, since deploy_to_kubernetes already waits for them to start.
+      - name: Clone down repository
+        uses: actions/checkout@v4
+
+      - name: Running availability test script
+        run: |
+          chmod +x availability.sh
+          ./availability.sh
